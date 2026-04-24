@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Task List UI</title>
+</head>
+<body>
+  <h1>Tasks</h1>
+
+  <form id="task-form">
+    <input id="task-title" name="title" type="text" placeholder="New task title" required />
+    <button type="submit">Add Task</button>
+  </form>
+
+  <p id="message" aria-live="polite"></p>
+
+  <ul id="task-list"></ul>
+
+  <script>
+    const taskList = document.getElementById('task-list');
+    const taskForm = document.getElementById('task-form');
+    const taskTitleInput = document.getElementById('task-title');
+    const message = document.getElementById('message');
+    const API_BASE_URL = window.location.protocol === 'http:' || window.location.protocol === 'https:'
+      ? ''
+      : 'http://localhost:3000';
+
+    function setMessage(text) {
+      message.textContent = text;
+    }
+
+    async function apiRequest(path, options) {
+      const response = await fetch(API_BASE_URL + path, options);
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Request failed');
+      }
+
+      return data;
+    }
+
+    async function loadTasks() {
+      setMessage('Loading tasks...');
+      const data = await apiRequest('/tasks');
+
+      taskList.innerHTML = '';
+
+      data.tasks.forEach(function (task) {
+        const listItem = document.createElement('li');
+        const title = document.createElement('span');
+        title.textContent = task.title + ' (' + task.status + ') ';
+
+        const doneButton = document.createElement('button');
+        doneButton.textContent = 'Mark Done';
+        doneButton.disabled = task.status === 'done';
+        doneButton.addEventListener('click', async function () {
+          try {
+            await apiRequest('/tasks/' + task.id, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ status: 'done' })
+            });
+            await loadTasks();
+          } catch (error) {
+            setMessage(error.message);
+          }
+        });
+
+        const deleteButton = document.createElement('button');
+        deleteButton.textContent = 'Delete';
+        deleteButton.addEventListener('click', async function () {
+          try {
+            await apiRequest('/tasks/' + task.id, { method: 'DELETE' });
+            await loadTasks();
+          } catch (error) {
+            setMessage(error.message);
+          }
+        });
+
+        listItem.appendChild(title);
+        listItem.appendChild(doneButton);
+        listItem.appendChild(deleteButton);
+        taskList.appendChild(listItem);
+      });
+
+      setMessage(data.tasks.length ? '' : 'No tasks yet.');
+    }
+
+    taskForm.addEventListener('submit', async function (event) {
+      event.preventDefault();
+
+      const title = taskTitleInput.value.trim();
+      if (!title) {
+        setMessage('Title is required.');
+        return;
+      }
+
+      try {
+        await apiRequest('/tasks', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title: title })
+        });
+
+        taskForm.reset();
+        setMessage('');
+        await loadTasks();
+      } catch (error) {
+        setMessage(error.message);
+      }
+    });
+
+    loadTasks().catch(function () {
+      setMessage('Unable to load tasks.');
+    });
+  </script>
+</body>
+</html>
